@@ -15,7 +15,7 @@ contract MemeToken is ERC20, ERC20Burnable, Ownable {
     // 添加消费税受益者地址
     address private _taxBeneficiaries;
     // 设置单笔交易最大额度（防止大户操纵市场）
-    uint256 public maxTxAmount = 100000 * 10 ** decimals(); // 1000 个代币
+    uint256 public maxTxAmount = 100000 * 10 ** decimals(); // 100000 个代币
     // 设置单日交易次数上限（防止频繁交易）
     uint256 public maxDailyTxCount = 10;
     mapping(address => uint256) private _dailyTxCount;
@@ -120,6 +120,7 @@ contract MemeToken is ERC20, ERC20Burnable, Ownable {
     // 设置税率
     function setTaxRate(uint256 newTaxRate) public onlyOwner {
         require(newTaxRate <= 25, "Tax rate too high"); // 最大25%
+        require(newTaxRate >= 0, "Tax rate cannot be zero");// 最小0%
         uint256 oldRate = taxRate;
         taxRate = newTaxRate;
         emit TaxRateUpdated(oldRate, newTaxRate);

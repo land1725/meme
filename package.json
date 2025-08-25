@@ -6,7 +6,7 @@
     "compile": "hardhat compile",
     "test": "hardhat test",
     "node": "hardhat node",
-    "deploy:localhost": "hardhat run scripts/deploy.js --network localhost",
+    "deploy:localhost": "hardhat deploy --network localhost",
     "clean": "hardhat clean"
   },
   "devDependencies": {
@@ -21,6 +21,7 @@
     "dotenv": "^17.2.1",
     "ethers": "^5.7.2",
     "hardhat": "^2.19.5",
+    "hardhat-deploy": "^1.0.4",
     "hardhat-gas-reporter": "^1.0.9",
     "solidity-coverage": "^0.8.5",
     "typechain": "^8.3.2"
