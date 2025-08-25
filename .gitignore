@@ -8,6 +8,8 @@ typechain-types
 # Hardhat files
 cache
 artifacts
+.deps
+.states
 
 # DS_Store
 .DS_Store

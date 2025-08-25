@@ -203,3 +203,165 @@
 4. 定期评估市场环境变化
 5. 在保护投资者和维护流动性间寻求平衡
 
+Meme 代币买入（Buy）操作的合约交互流程分析
+当用户通过 DEX（如 Uniswap）用 ETH 购买 Meme 代币时，涉及的 3 个核心合约（主代币合约、代币税合约、流动性池合约）会按以下顺序交互：
+
+文字流程描述
+用户发起交易
+
+用户在 Uniswap 界面用 ETH 兑换 Meme 代币，调用 DEX Router 合约的 swapExactETHForTokens 函数。
+DEX Router 调用流动性池合约
+
+Router 检查流动性池（如 ETH/Meme Pair 合约）的储备量，计算应获得的 Meme 代币数量。
+流动性池合约转账 Meme 代币
+
+流动性池合约调用 主代币合约 的 transfer 函数，向用户发送 Meme 代币。
+主代币合约触发代币税逻辑
+
+主代币合约的 transfer 函数检测到是交易行为（非白名单地址），调用 代币税合约 的 takeTax 函数。
+代币税合约扣除 5% 的交易税（假设税率），并分配：
+2% 销毁（发送到死地址 0xdead）
+2% 注入流动性池
+1% 分配给持币分红（Reflections）
+税费分配执行
+
+销毁：直接调用主代币合约的 transfer 发送到死地址。
+流动性注入：调用 流动性池合约 的 addLiquidityAutomatically，将税费兑换成 ETH+Meme 并注入池子。
+分红：更新持币者的分红余额（通过主代币合约的 _reflectFee 函数）。
+最终用户接收代币
+
+用户实际收到 95% 的应得代币（扣除 5% 税后的净额）。
+
+
+当用户通过 DEX（如 Uniswap）卖出 Meme 代币时，涉及的 3 个核心合约（主代币合约、代币税合约、流动性池合约）会按以下顺序交互：
+
+文字流程描述
+用户授权代币（Approve）
+
+用户首先调用 主代币合约 的 approve 函数，授权 Router 合约可转出指定数量的 Meme 代币。
+用户发起卖出交易
+
+用户调用 DEX Router 合约 的 swapExactTokensForETH 函数，传入：
+卖出的代币数量
+可接受的最小 ETH 数量（amountOutMin）
+代币→ETH 的交易路径（[Meme代币地址, WETH地址]）
+交易截止时间（deadline）
+Router 调用流动性池合约
+
+Router 检查 流动性池合约（ETH/Meme Pair） 的储备量（getReserves），计算用户应获得的 ETH 数量。
+流动性池请求转账 Meme 代币
+
+流动性池合约调用 主代币合约 的 transferFrom 函数，从用户钱包转出 Meme 代币到池子。
+主代币合约触发代币税逻辑
+
+主代币合约的 transferFrom 检测到是卖出交易，调用 代币税合约 的 takeTax 函数：
+扣除卖出税（例如 10%），分配规则可能包括：
+3% 销毁
+4% 注入流动性
+3% 分红给持币者
+剩余 90% 的代币转入流动性池。
+流动性池支付 ETH 给用户
+
+流动性池合约向用户发送计算好的 ETH 数量（扣除税费后的净额）。
+自动流动性注入（如启用）
+
+如果税费中包含流动性注入部分，代币税合约 会调用 Router 的 addLiquidityETH，将税费代币自动兑换为 ETH 并注入池子。
+分红分配
+
+分红部分的代币通过主代币合约的 _reflectFee 函数，按比例分配给所有持币者。
+
+Meme代币普通转账（Transfer）的完整流程（文字版）
+用户发起转账请求
+用户A通过钱包调用主代币合约的transfer(用户B地址, 转账数量)函数，请求向用户B转账指定数量的Meme代币。
+
+主代币合约触发税务逻辑
+主代币合约收到转账请求后，立即调用代币税合约的takeTax(转账数量)函数，进行税务计算和处理。此时：
+
+系统会根据预设税率（例如10%）扣除税费
+计算实际可转账数量：实际转账量 = 原始数量 × 90%
+税费分配执行
+代币税合约处理完成后，将控制权交还主代币合约，主代币合约会执行以下操作：
+
+将实际转账量（90%）通过内部_transfer函数转给用户B
+将税费部分（10%）拆分为：
+销毁部分：通过_transfer发送到销毁地址（如0xdead）
+分红部分：调用_reflectFee函数分配给持币者分红池
+交易完成
+所有转账操作在同一个交易中原子化完成，区块链状态更新：
+
+用户A余额减少：原始转账数量（100%）
+用户B余额增加：实际到账数量（90%）
+销毁地址余额增加：销毁税部分
+分红池权重更新：反映新增分红
+关键特征说明
+原子化操作：所有步骤在一个交易内完成，要么全部成功，要么全部回滚
+实时扣税：接收方得到的永远是税后金额
+税务自动化：无需用户额外操作，合约自动处理税费分配
+状态一致性：所有余额变化在同一区块高度生效
+
+
+✅ 添加流动性（Add Liquidity）• 将 Meme 代币 + 配对代币（如 ETH）按比例存入 DEX 流动性池• 获得 LP 代币（流动性凭证）分析三个合约之间的调用关系
+3. 分步解析
+步骤 1：Router 计算实际添加量
+Router 调用 Pair 的 getReserves()，获取当前池子中 Meme 和 ETH 的储备量。
+根据 恒定乘积公式 计算用户需提供的精确代币数量：
+solid
+复制代码
+memeAmountActual = (ethAmount * reserveMeme) / reserveETH
+检查是否满足用户设置的最小值（memeAmountMin 和 ethAmountMin）。
+步骤 2：代币转账与税费处理
+Meme 代币转账
+
+Router 调用主代币合约的 transferFrom，从用户钱包转出 Meme 代币到 Pair 合约。
+主代币合约触发税费逻辑（如扣除 5% 的流动性添加税），实际到账量为 memeAmountActual * 95%。
+ETH/WETH 转账
+
+Router 将用户提供的 ETH 转为 WETH，并转给 Pair 合约。
+步骤 3：铸造 LP 代币
+Pair 合约根据用户提供的流动性比例，铸造对应的 LP 代币：
+solidity
+复制代码
+liquidity = min(
+    (memeAmountActual * totalLP) / reserveMeme,
+    (ethAmount * totalLP) / reserveETH
+)
+将 LP 代币发送给用户，作为流动性凭证。
+4. 关键合约交互
+合约	调用方	函数	作用
+主代币合约	Router合约	transferFrom()	转出 Meme 代币（含税）到 Pair
+代币税合约	主代币合约	takeTax()	扣除流动性添加税
+WETH合约	Router合约	transferFrom()	转出 WETH 到 Pair
+Pair合约	Router合约	mint()	铸造 LP 代币给用户
+
+
+
+
+✅ 移除流动性（Remove Liquidity）• 销毁 LP 代币，取回 Meme 代币 + 配对代币• 可能因价格波动产生 无常损失（Impermanent Loss）
+(1) 用户调用 Router 的 removeLiquidityETH
+输入参数：
+LP数量：要销毁的流动性凭证数量。
+memeAmountMin / ethAmountMin：用户可接受的最小代币返还量（防止滑点损失）。
+deadline：交易有效期。
+(2) Router 调用 Pair 合约的 burn
+转 LP 代币到 Pair 合约
+Router 调用 transferFrom，将用户的 LP 代币转入 Pair 合约。
+销毁 LP 代币并计算返还量
+Pair 合约执行 burn 逻辑：
+solid
+复制代码
+function burn(address to) external returns (uint amount0, uint amount1) {
+    // 计算用户应得的两种代币数量
+    amount0 = (balance0 * liquidity) / totalSupply;
+    amount1 = (balance1 * liquidity) / totalSupply;
+    _burn(msg.sender, liquidity); // 销毁LP代币
+    _safeTransfer(token0, to, amount0); // 返还Meme代币
+    _safeTransfer(token1, to, amount1); // 返还ETH（WETH）
+}
+关键点：
+返还的代币数量按 当前池子储备比例 计算。
+如果代币价格波动，用户可能面临 无常损失（Impermanent Loss）。
+(3) Router 处理返还的代币
+Meme 代币返还
+Pair 合约将 memeAmountOut 转给 Router，Router 再转给用户。
+WETH → ETH 转换
+Pair 返还的是 WETH（因 DEX 内部使用 WETH），Router 调用 WETH.withdraw() 将其转为 ETH 并发送给用户。

@@ -32,5 +32,8 @@
     "smart-contracts"
   ],
   "author": "",
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": {
+    "@openzeppelin/contracts": "^5.4.0"
+  }
 }
