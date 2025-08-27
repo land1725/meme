@@ -15,9 +15,8 @@ module.exports = async ({ getNamedAccounts, deployments, ethers }) => {
 
   await deploy("LpToken", {
     from: deployer,
-    contract: "LiquidityPoolManager", // 指定使用 LiquidityPoolManager.sol 中的 LpToken 合约
-    // 代币名称
-    args: [deployer,memeToken.address], 
+    contract: "LpToken", // 使用 LiquidityPoolManager.sol 文件中的 LpToken 合约
+    args: [deployer, memeToken.address], 
     log: true,
   });
 }

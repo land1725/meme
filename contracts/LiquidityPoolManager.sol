@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Compatible with OpenZeppelin Contracts ^5.4.0
 
-pragma solidity ^0.8.27;
+pragma solidity ^0.8.20;
 
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {ERC20Burnable} from "@openzeppelin/contracts/token/ERC20/extensions/ERC20Burnable.sol";
@@ -166,6 +166,10 @@ contract LpToken is ERC20, ERC20Burnable, Ownable {
         } else if (y != 0) {
             z = 1;
         }
+    }
+    // 读取流动性池中Meme代币的地址
+    function getMemeTokenAddress() external view returns (address) {
+        return memeTokenAddress;
     }
 
 }

@@ -27,8 +27,25 @@ describe("MemeToken Contract", function () {
     taxBeneficiary = deployer;
     console.log(`👥 [ACCOUNTS] Got ${signers.length} signers, deployer: ${deployer.address}`);
 
-    // 部署合约
-    await deployments.fixture(["MemeToken"]);
+    // 获取或部署合约 - 根据网络类型决定是否重新部署
+    if (isLocalNet) {
+      // 本地网络：使用 fixture 重新部署确保测试环境干净
+      console.log("   🏠 本地网络：重新部署所有合约");
+      await deployments.fixture(["MemeToken"]);
+    } else {
+      // 远程网络：尝试使用已部署的合约，如果不存在则部署
+      console.log("   🌐 远程网络：查找已部署的合约");
+      try {
+        // 检查是否已有部署记录
+        await deployments.get("MemeToken");
+        console.log("   ✅ 找到已部署的合约");
+      } catch (error) {
+        console.log("   ⚠️  未找到已部署的合约，开始部署...");
+        await deployments.fixture(["MemeToken"]);
+      }
+    }
+
+    // 获取 MemeToken 合约
     const deployment = await deployments.get("MemeToken");
     memeToken = await ethers.getContractAt("MemeToken", deployment.address, deployer);
     
