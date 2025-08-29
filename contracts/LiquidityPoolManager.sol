@@ -119,7 +119,11 @@ contract LpToken is ERC20, ERC20Burnable, Ownable {
     }
     // 用户提供ETH，交换Meme代币
     function swapEthForMeme(uint256 minMemeOut) public payable {
+        // 检查输入的ETH数量是否合法
         require(msg.value > 0, "Invalid ETH amount");
+        // 超池流动性检查，兑换的eth币不能超过池子总量的90%
+        require(msg.value <= _ethCount * 9 / 10, "Exceeds max swap amount");
+
         // 计算用户实际可用的ETH数量，扣除手续费
         uint256 effectiveEth = msg.value * (1000 - swapFeeRate) / 1000;
         // 计算用户可获得的Meme代币数量，按x*y=k算法
@@ -136,6 +140,8 @@ contract LpToken is ERC20, ERC20Burnable, Ownable {
     function swapMemeForEth(uint256 memeIn, uint256 minEthOut) public {
         // 检查输入的Meme代币数量是否合法
         require(memeIn > 0, "Invalid Meme amount");
+        // 超池流动性检查，兑换的meme币不能超过池子总量的90%
+        require(memeIn <= _memeCount * 9 / 10, "Exceeds max swap amount");
         // 检查用户余额是否足够
         require(MemeToken(memeTokenAddress).balanceOf(msg.sender) >= memeIn, "Insufficient Meme balance");
         // 检查用户是否已授权池子合约可以转移这部分Meme代币（例如先approve）
@@ -171,5 +177,10 @@ contract LpToken is ERC20, ERC20Burnable, Ownable {
     function getMemeTokenAddress() external view returns (address) {
         return memeTokenAddress;
     }
-
+    // 设定swap手续费
+    function setSwapFeeRate(uint256 newRate) external onlyOwner {
+        require(newRate > 0, "Invalid fee rate");
+        require(newRate <= 10, "Fee rate too high"); // 最大不超过1%
+        swapFeeRate = newRate;
+        }
 }

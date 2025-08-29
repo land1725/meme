@@ -97,6 +97,10 @@ contract MemeToken is ERC20, ERC20Burnable, Ownable {
     }
     
     function _updateDailyTxCount(address account) internal {
+        // 白名单地址不计入交易次数
+        if (_isExcludedFromTax[account]) {
+            return;
+        }
         if (block.timestamp - _lastTxTimestamp[account] >= 1 days) {
             _dailyTxCount[account] = 1;
         } else {

@@ -10,8 +10,9 @@ describe("MemeToken Contract", function () {
   let network, isLocalNet;
   let signers;
 
-  before(async function () {
-    console.log("🚀 [SETUP] Initializing test environment...");
+  // 在每个测试前重新部署合约并初始化环境确保干净状态
+  beforeEach(async function () {
+    console.log("🚀 [SETUP] Initializing test environment and redeploying contracts...");
 
     // 检查网络状态
     network = await ethers.provider.getNetwork();
@@ -26,30 +27,23 @@ describe("MemeToken Contract", function () {
     deployer = signers[0];
     taxBeneficiary = deployer;
     console.log(`👥 [ACCOUNTS] Got ${signers.length} signers, deployer: ${deployer.address}`);
-
-    // 获取或部署合约 - 根据网络类型决定是否重新部署
-    if (isLocalNet) {
-      // 本地网络：使用 fixture 重新部署确保测试环境干净
-      console.log("   🏠 本地网络：重新部署所有合约");
-      await deployments.fixture(["MemeToken"]);
-    } else {
-      // 远程网络：尝试使用已部署的合约，如果不存在则部署
-      console.log("   🌐 远程网络：查找已部署的合约");
-      try {
-        // 检查是否已有部署记录
-        await deployments.get("MemeToken");
-        console.log("   ✅ 找到已部署的合约");
-      } catch (error) {
-        console.log("   ⚠️  未找到已部署的合约，开始部署...");
-        await deployments.fixture(["MemeToken"]);
-      }
-    }
-
-    // 获取 MemeToken 合约
+    
+    // 重新部署合约
+    await deployments.fixture(["MemeToken"]);
+    
+    // 重新获取合约实例
     const deployment = await deployments.get("MemeToken");
     memeToken = await ethers.getContractAt("MemeToken", deployment.address, deployer);
     
+    // 确保deployer在白名单中
+    await memeToken.addToWhitelist(deployer.address);
+    
+    if (!isLocalNet) {
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+    
     console.log(`📄 [CONTRACT] MemeToken deployed at: ${memeToken.address}`);
+    console.log("✅ [SETUP] Contract redeployment completed");
   });
 
   describe("测试套件1：合约初始化验证", function () {
@@ -458,10 +452,23 @@ describe("MemeToken Contract", function () {
     });
 
     it("should enforce max daily transaction count", async function () {
+      console.log("🚀 [DEBUG] Starting max daily transaction count test");
+      
       const addr1 = signers[1];
       const addr2 = signers[2];
 
+      // 检查初始状态
+      console.log("🔍 [DEBUG] Checking initial state...");
+      const isDeployerWhitelisted = await memeToken.isExcludedFromTax(deployer.address);
+      const deployerDailyTxCount = await memeToken.getDailyTxCount(deployer.address);
+      const addr1DailyTxCount = await memeToken.getDailyTxCount(addr1.address);
+      
+      console.log(`🔍 [DEBUG] Deployer whitelisted: ${isDeployerWhitelisted}`);
+      console.log(`🔍 [DEBUG] Deployer daily tx count: ${deployerDailyTxCount.toString()}`);
+      console.log(`🔍 [DEBUG] Addr1 daily tx count: ${addr1DailyTxCount.toString()}`);
+
       // 部署者转账给addr1
+      console.log("💸 [DEBUG] Deployer transferring to addr1...");
       const initialTx = await memeToken
         .connect(deployer)
         .transfer(addr1.address, ethers.utils.parseUnits("100", 18));
@@ -469,18 +476,46 @@ describe("MemeToken Contract", function () {
       if (!isLocalNet) {
         await initialTx.wait();
       }
+      
+      // 检查转账后的状态
+      const deployerDailyTxCountAfter = await memeToken.getDailyTxCount(deployer.address);
+      console.log(`🔍 [DEBUG] Deployer daily tx count after transfer: ${deployerDailyTxCountAfter.toString()}`);
 
       // 读取最大日交易次数
       const maxDailyTxCount = await memeToken.maxDailyTxCount();
-      console.log("📊 [TEST] Max Daily Transaction Count:", maxDailyTxCount.toString());
+      console.log("📊 [DEBUG] Max Daily Transaction Count:", maxDailyTxCount.toString());
 
       // 根据网络调整测试循环次数
       const testIterations = isLocalNet ? maxDailyTxCount : Math.min(maxDailyTxCount, 2);
+      console.log(`🔍 [DEBUG] Test iterations: ${testIterations.toString()}`);
 
       // 修改最大日交易次数为测试次数
-      const setMaxDailyTx = await memeToken.connect(deployer).setMaxDailyTxCount(testIterations);
+      console.log(`⚙️ [DEBUG] Setting max daily tx count to: ${testIterations.toString()}`);
+      try {
+        const setMaxDailyTx = await memeToken.connect(deployer).setMaxDailyTxCount(testIterations);
+        if (!isLocalNet) {
+          await setMaxDailyTx.wait();
+        }
+        console.log("✅ [DEBUG] Successfully set max daily tx count");
+      } catch (error) {
+        console.log("❌ [DEBUG] Error setting max daily tx count:", error.message);
+        throw error;
+      }
+      
+      // 检查设置后的状态
+      const deployerDailyTxCountAfterSet = await memeToken.getDailyTxCount(deployer.address);
+      const newMaxDailyTxCount = await memeToken.maxDailyTxCount();
+      console.log(`🔍 [DEBUG] Deployer daily tx count after setMaxDailyTxCount: ${deployerDailyTxCountAfterSet.toString()}`);
+      console.log(`🔍 [DEBUG] New max daily tx count: ${newMaxDailyTxCount.toString()}`);
+      
       // 连续转账达到限制
+      console.log(`🔄 [DEBUG] Starting loop for ${testIterations} transactions...`);
       for (let i = 0; i < testIterations; i++) {
+        console.log(`💸 [DEBUG] Transaction ${i + 1}/${testIterations} - addr1 → addr2`);
+        
+        const addr1TxCountBefore = await memeToken.getDailyTxCount(addr1.address);
+        console.log(`🔍 [DEBUG] Addr1 tx count before transaction ${i + 1}: ${addr1TxCountBefore.toString()}`);
+        
         const tx = await memeToken
           .connect(addr1)
           .transfer(addr2.address, ethers.utils.parseUnits("1", 18));
@@ -488,44 +523,65 @@ describe("MemeToken Contract", function () {
         if (!isLocalNet) {
           await tx.wait();
         }
+        
+        const addr1TxCountAfter = await memeToken.getDailyTxCount(addr1.address);
+        console.log(`🔍 [DEBUG] Addr1 tx count after transaction ${i + 1}: ${addr1TxCountAfter.toString()}`);
       }
 
+      // 检查循环后的状态
+      const finalAddr1TxCount = await memeToken.getDailyTxCount(addr1.address);
+      const finalMaxDailyTxCount = await memeToken.maxDailyTxCount();
+      console.log(`🔍 [DEBUG] Final addr1 tx count: ${finalAddr1TxCount.toString()}`);
+      console.log(`🔍 [DEBUG] Final max daily tx count: ${finalMaxDailyTxCount.toString()}`);
+
       // 超过限制的转账应失败
+      console.log("🚫 [DEBUG] Testing transaction that should exceed limit...");
       if (isLocalNet) {
         await expect(
           memeToken
             .connect(addr1)
             .transfer(addr2.address, ethers.utils.parseUnits("1", 18))
         ).to.be.revertedWith("Exceeds daily transaction count");
+        console.log("✅ [DEBUG] Transaction correctly failed on local network");
       } else {
         try {
-          await memeToken
+          const tx = await memeToken
             .connect(addr1)
             .transfer(addr2.address, ethers.utils.parseUnits("1", 18));
+          console.log("❌ [DEBUG] Transaction unexpectedly succeeded on remote network");
           throw new Error("Should have reverted");
         } catch (e) {
-          if (!e) {
-            throw new Error("Expected an exception but got none");
+          if (e.message === "Should have reverted") {
+            throw e;
           }
+          console.log("✅ [DEBUG] Transaction correctly failed on remote network:", e.message);
         }
       }
 
       // 仅在本地网络测试时间前进
       if (network.chainId !== 31337) {
-        console.log("⚠️ [TEST] Skipping time manipulation test on non-local network");
+        console.log("⚠️ [DEBUG] Skipping time manipulation test on non-local network");
         return;
       }
 
+      console.log("⏰ [DEBUG] Advancing time by 24 hours...");
       // 模拟时间前进24小时
       await ethers.provider.send("evm_increaseTime", [24 * 60 * 60]);
       await ethers.provider.send("evm_mine", []);
 
+      // 检查时间前进后的状态
+      const addr1TxCountAfterTime = await memeToken.getDailyTxCount(addr1.address);
+      console.log(`🔍 [DEBUG] Addr1 tx count after time advance: ${addr1TxCountAfterTime.toString()}`);
+
       // 时间重置后再次转账应成功
+      console.log("✅ [DEBUG] Testing transaction after time reset...");
       await expect(
         memeToken
           .connect(addr1)
           .transfer(addr2.address, ethers.utils.parseUnits("1", 18))
       ).to.not.be.reverted;
+      
+      console.log("🎉 [DEBUG] Max daily transaction count test completed successfully");
     });
     it("should fail on transfers to zero address, contract itself, or insufficient balance", async function () {
       const addr1 = signers[1];
